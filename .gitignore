@@ -1,0 +1,10 @@
+server/build/
+data/*.db
+data/*.db-*
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+web/dist/
+pipeline/out/
+pipeline/raw/

@@ -1,0 +1,13 @@
+{
+  "_comment": "Tunable business rules (roadmap 7). Values equal the built-in defaults in server/src/rules.c; edit here to experiment. Keys starting with '_' are ignored, unknown keys are rejected at startup.",
+  "claim_prior_votes": 5,
+  "claim_min_p": 0.55,
+  "claim_user_prior": 0.5,
+  "vote_checkin_boost": 1.5,
+  "search_default_limit": 20,
+  "search_max_limit": 50,
+  "search_w_live": 0.5,
+  "search_w_dist": 0.3,
+  "search_w_quality": 0.5,
+  "session_ttl_ms": 2592000000
+}
