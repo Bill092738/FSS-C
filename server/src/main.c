@@ -8,8 +8,11 @@
 #include "attrs.h"
 #include "auth.h"
 #include "db.h"
+#include "jobs.h"
+#include "live.h"
 #include "rules_load.h"
 #include "spots.h"
+#include "ws.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +20,7 @@
 #include <sys/stat.h>
 
 static fio_io_async_s HTTP_Q = FIO_IO_ASYN_INIT;
+static fio_io_async_s JOB_Q = FIO_IO_ASYN_INIT; /* one thread (roadmap 4.6) */
 
 static struct {
   const char *bind;
@@ -30,6 +34,7 @@ static struct {
   int migrate_only;
   int materialize;
   int bench_password;
+  int test_clock;
 } CFG = {
     .bind = "0.0.0.0:8080",
     .db = "data/fss.db",
@@ -55,7 +60,8 @@ static void usage(const char *prog) {
           "  --migrate-only       apply migrations and exit\n"
           "  --seed FILE          execute an SQL file in one transaction and exit\n"
           "  --materialize        recompute every spot from its claims and exit\n"
-          "  --bench-password     time one Argon2id hash with the current parameters\n",
+          "  --bench-password     time one Argon2id hash with the current parameters\n"
+          "  --test-clock         honor the X-FSS-Now request header (tests only)\n",
           prog, CFG.bind, CFG.db, CFG.migrations, CFG.public_dir, CFG.rules,
           CFG.threads);
 }
@@ -100,6 +106,10 @@ static int parse_args(int argc, char const *argv[]) {
     }
     if (!strcmp(a, "--materialize")) {
       CFG.materialize = 1;
+      continue;
+    }
+    if (!strcmp(a, "--test-clock")) {
+      CFG.test_clock = 1;
       continue;
     }
     return -1;
@@ -229,12 +239,25 @@ int main(int argc, char const *argv[]) {
   fio_state_callback_add(FIO_CALL_ON_WORKER_THREAD_END, fss_db_thread_close,
                          NULL);
   fio_io_async_attach(&HTTP_Q, (uint32_t)CFG.threads);
+  fio_io_async_attach(&JOB_Q, 1);
+  fss_jobs_register(&JOB_Q);
 
-  fio_http_listener_s *l = fio_http_listen(CFG.bind, .on_http = on_root,
-                                           .queue = &HTTP_Q,
-                                           .max_body_size = 8 << 20,
-                                           .ws_max_msg_size = 16 << 10,
-                                           .log = (uint8_t)CFG.log);
+  /* WebSocket replay (`since`) reads the in-memory Pub/Sub history */
+  fss_pubsub_clock_init();
+  fio_pubsub_history_attach(fio_pubsub_history_cache(0), 1);
+  FSS_TEST_CLOCK = CFG.test_clock;
+  if (FSS_TEST_CLOCK)
+    FIO_LOG_WARNING("--test-clock: X-FSS-Now headers override the clock");
+
+  /* WebSocket messages are not compressed (compress_ws stays 0): without a
+   * shared deflate context every frame is a single fio_io_write, so replies
+   * from on_message and Pub/Sub forwarding cannot interleave. */
+  fio_http_listener_s *l = fio_http_listen(
+      CFG.bind, .on_http = on_root, .queue = &HTTP_Q,
+      .on_authenticate_websocket = fss_ws_authenticate,
+      .on_open = fss_ws_on_open, .on_message = fss_ws_on_message,
+      .on_close = fss_ws_on_close, .max_body_size = 8 << 20,
+      .ws_max_msg_size = 16 << 10, .log = (uint8_t)CFG.log);
   if (!l) {
     FIO_LOG_FATAL("could not listen on %s", CFG.bind);
     return 1;
@@ -242,5 +265,6 @@ int main(int argc, char const *argv[]) {
   fio_http_route(l, "/api/v1", .on_http = fss_api_dispatch);
   FIO_LOG_INFO("FSS listening on %s (%d HTTP threads)", CFG.bind, CFG.threads);
   fio_io_start(0);
+  fss_jobs_release(&JOB_Q);
   return 0;
 }

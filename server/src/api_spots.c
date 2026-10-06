@@ -301,6 +301,15 @@ static const char SQL_SPOT_SHOW[] =
     " 'live', (SELECT json_object('est', round(o.est, 2), 'conf', round(o.conf, 2),"
     "    'basis', o.basis, 'color', fss_color(o.est), 'at', o.updated_at)"
     "    FROM occupancy_live o WHERE o.spot_id = s.id),"
+    /* visible event reports (roadmap 7.3); same rule as fss_event_update */
+    " 'events', (SELECT json_group_array(json_object('kind', e.kind,"
+    "    'reports', e.users, 'until', e.last + ?6)) FROM ("
+    "    SELECT r.event AS kind, count(DISTINCT r.user_id) AS users,"
+    "      max(r.at) AS last,"
+    "      max(r.fence >= ?3 AND r.weight >= ?4 * r.fence) AS trusted"
+    "    FROM report r WHERE r.spot_id = s.id AND r.event IS NOT NULL"
+    "      AND r.at > ?2 - ?6 AND r.at <= ?2 GROUP BY r.event) e"
+    "    WHERE e.users >= ?5 OR e.trusted),"
     " 'claims', (SELECT json_group_array(json_object("
     "    'id', cl.id, 'attr', cl.attr, 'value', json(cl.value),"
     "    'source', cl.source, 'evidence', cl.evidence, 'url', sd.url,"
@@ -320,6 +329,11 @@ static void send_spot(fio_http_s *h, size_t status, int64_t id) {
     return;
   }
   sqlite3_bind_int64(st, 1, id);
+  sqlite3_bind_int64(st, 2, fss_now_ms());
+  sqlite3_bind_double(st, 3, FSS_RULES.fence_g_inside);
+  sqlite3_bind_double(st, 4, FSS_RULES.event_trusted_rep);
+  sqlite3_bind_int(st, 5, FSS_RULES.event_min_users);
+  sqlite3_bind_int64(st, 6, FSS_RULES.event_ttl_ms);
   int rc = sqlite3_step(st);
   if (rc == SQLITE_ROW) {
     char *out = fio_bstr_write(NULL, "{\"spot\":", 8);

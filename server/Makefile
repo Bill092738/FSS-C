@@ -41,7 +41,7 @@ APP_OBJ  = $(APP_SRC:src/%.c=$(OUT)/%.o)
 LIB_OBJ  = $(OUT)/fio_impl.o build/sqlite3.o
 
 # Pure modules (no cstl / SQLite dependency) exercised by the unit tests.
-PURE_SRC = src/util.c src/router.c src/rules.c
+PURE_SRC = src/util.c src/router.c src/rules.c src/geo.c
 TEST_SRC = $(wildcard tests/unit/*.c)
 TEST_BIN = build/unit-tests
 

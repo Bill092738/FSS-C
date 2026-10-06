@@ -46,5 +46,7 @@ int64_t fss_require_user(fio_http_s *h);
 /* CSRF baseline: if an Origin header is present, its host must equal the Host
  * header. Sends 403 and returns -1 on mismatch. */
 int fss_check_origin(fio_http_s *h);
+/* The same test without a response: 1 when acceptable. */
+int fss_origin_ok(fio_http_s *h);
 
 #endif /* FSS_AUTH_H */

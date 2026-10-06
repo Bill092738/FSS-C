@@ -2,8 +2,10 @@
 
 Each test module gets a fresh server process with its own temporary database.
 `server` starts from an empty schema; `demo` additionally loads the synthetic
-fixture data/seed/demo.sql. The binary defaults to server/build/fss; set
-FSS_BIN to test another build (for example server/build/fss-debug).
+fixture data/seed/demo.sql; `spawn` starts extra servers with rule overrides.
+Servers run with --test-clock, so an `X-FSS-Now` header sets the request's
+clock. The binary defaults to server/build/fss; set FSS_BIN to test another
+build (for example server/build/fss-debug).
 """
 
 from __future__ import annotations
@@ -55,6 +57,14 @@ class Client:
     def new_client(self) -> "Client":
         return Client(self.base)
 
+    @property
+    def ws_url(self) -> str:
+        return self.base.replace("http://", "ws://", 1) + "/ws"
+
+    def cookie_header(self) -> dict[str, str]:
+        """Session cookie as a header, for WebSocket handshakes."""
+        return {"Cookie": "; ".join(f"{c.name}={c.value}" for c in self.jar)}
+
     def request(self, method: str, path: str, body=None, headers=None, raw: bytes | None = None) -> Response:
         data = raw
         hdrs = dict(headers or {})
@@ -90,7 +100,7 @@ def _run(args: list[str]) -> None:
         raise RuntimeError(proc.stdout + proc.stderr)
 
 
-def _start(tmp: Path, seed: Path | None):
+def _start(tmp: Path, seed: Path | None, extra: list[str] | None = None, clock: bool = True):
     if not BIN.exists():
         pytest.skip(f"server binary not built: {BIN}")
     db = tmp / "test.db"
@@ -102,7 +112,8 @@ def _start(tmp: Path, seed: Path | None):
     log = open(tmp / "server.log", "wb")
     proc = subprocess.Popen(
         [str(BIN), *common, "--bind", f"127.0.0.1:{port}",
-         "--public", str(tmp / "no-public"), "--threads", "2", "--quiet"],
+         "--public", str(tmp / "no-public"), "--threads", "2", "--quiet",
+         *(["--test-clock"] if clock else []), *(extra or [])],
         stdout=log,
         stderr=subprocess.STDOUT,
     )
@@ -145,3 +156,23 @@ def demo(tmp_path_factory):
     proc, log, client = _start(tmp_path_factory.mktemp("fss-demo"), DEMO_SEED)
     yield client
     _stop(proc, log)
+
+
+@pytest.fixture(scope="module")
+def spawn(tmp_path_factory):
+    """Starts demo-seeded servers with rule overrides: spawn(rules={...})."""
+    running = []
+
+    def _spawn(rules: dict | None = None, clock: bool = True, seed: Path | None = DEMO_SEED) -> Client:
+        tmp = tmp_path_factory.mktemp("fss-spawn")
+        extra = []
+        if rules:
+            (tmp / "rules.json").write_text(json.dumps(rules))
+            extra = ["--rules", str(tmp / "rules.json")]
+        proc, log, client = _start(tmp, seed, extra, clock)
+        running.append((proc, log))
+        return client
+
+    yield _spawn
+    for proc, log in running:
+        _stop(proc, log)

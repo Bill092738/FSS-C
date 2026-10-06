@@ -19,6 +19,7 @@ static const fss_route_s FSS_ROUTES[] = {
     {"POST", "/spots", api_spots_create},
     {"GET", "/spots/#id", api_spot_show},
     {"POST", "/spots/#id/claims", api_spot_claims_create},
+    {"POST", "/spots/#id/reports", api_spot_reports_create},
     {"POST", "/claims/#id/vote", api_claim_vote},
 };
 
@@ -42,7 +43,10 @@ void fss_api_dispatch(fio_http_s *h) {
     path_known = 1;
     if (!method_is(method, FSS_ROUTES[i].method))
       continue;
+    if (fss_clock_from_request(h))
+      return;
     FSS_ROUTES[i].fn(h, &params);
+    fss_clock_reset();
     return;
   }
   if (path_known)
