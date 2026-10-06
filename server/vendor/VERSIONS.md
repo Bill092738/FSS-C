@@ -2,7 +2,7 @@
 
 | File | Upstream | Version | Integrity |
 | --- | --- | --- | --- |
-| `fio-stl.h` | https://github.com/facil-io/cstl | master @ `24a5701` (2026-08-21, "Defer error path in `fio_io_attach_fd`") | license in `fio-stl.LICENSE` |
+| `fio-stl.h` | https://github.com/facil-io/cstl | master @ `a24d0be` (2026-10-06, "Fixing a few edge cases with IO protocol misuse + better HTTP error support") | license in `fio-stl.LICENSE` |
 | `sqlite3.c`, `sqlite3.h` | https://sqlite.org/2026/sqlite-amalgamation-3530400.zip | SQLite 3.53.4 | SHA3-256 of the zip: `628a44cfe82c66aed1ccbbe85a562d2e33ebe64b3288981ed76285612227934e` |
 
 Upgrade policy (roadmap 11.1): bump one dependency per commit, record the new

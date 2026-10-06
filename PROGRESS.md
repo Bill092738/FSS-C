@@ -51,7 +51,7 @@ data/seed/demo.sql           synthetic "Demo University" fixture (NOT real data)
 server/
   Makefile                   release (gcc -O2) and debug (clang ASan+UBSan)
   config/rules.json          tunables (roadmap 7), unknown keys rejected
-  vendor/                    fio-stl.h (cstl 24a5701), SQLite 3.53.4, VERSIONS.md
+  vendor/                    fio-stl.h (cstl a24d0be), SQLite 3.53.4, VERSIONS.md
   migrations/0001_core.sql   core schema (5.2) + attr_def v1 (6.4)
   migrations/0002_live.sql   report.fence, event index
   src/fss_fio.h, fio_impl.c  cstl include / single implementation unit
@@ -163,7 +163,7 @@ Chinese text; a query token must equal a whole token (e.g. the tag "白板"
 matches, a substring of a longer Chinese phrase does not). A `trigram`
 tokenizer would fix this if needed.
 
-## cstl API notes (verified against docs/headers of 24a5701)
+## cstl API notes (verified against docs/headers of a24d0be)
 
 - `FIO_HTTP` pulls in JSON, multipart, URL-encoded, Pub/Sub, IPC and IO
   (`000 dependencies.h`). `FIO_RAND` is needed for `fio_rand_bytes_secure`.
@@ -210,6 +210,11 @@ tokenizer would fix this if needed.
   queue's `timers`, which cstl does not destroy on shutdown (it destroys only
   the reactor's own timer queue). `fss_jobs_release` calls `fio_timer_destroy`
   after `fio_io_start` returns.
+- **Error pages (since `a24d0be`):** `fio_http_send_error_response` (also
+  used internally, e.g. for 413/431) looks for `<status>.html` in `./` and then
+  in the route's `public_folder`. FSS sets no `public_folder` and sends its own
+  JSON errors, so only a `<status>.html` in the working directory is picked up,
+  as before.
 - **`compress_ws` stays off:** with permessage-deflate the per-connection
   compressor is shared by every write, so replies and Pub/Sub forwarding from
   different threads could interleave. Without it, each frame is one
