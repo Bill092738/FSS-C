@@ -152,19 +152,25 @@ int64_t fss_require_user(fio_http_s *h) {
   return uid;
 }
 
-int fss_check_origin(fio_http_s *h) {
+int fss_origin_ok(fio_http_s *h) {
   fio_str_info_s origin =
       fio_http_request_header(h, FIO_STR_INFO1("origin"), 0);
   if (!origin.len)
-    return 0; /* non-browser clients do not send Origin */
+    return 1; /* non-browser clients do not send Origin */
   fio_str_info_s host = fio_http_request_header(h, FIO_STR_INFO1("host"), 0);
   const char *sep = memmem(origin.buf, origin.len, "://", 3);
   if (sep && host.len) {
     const char *o_host = sep + 3;
     size_t o_len = origin.len - (size_t)(o_host - origin.buf);
     if (o_len == host.len && !memcmp(o_host, host.buf, host.len))
-      return 0;
+      return 1;
   }
+  return 0;
+}
+
+int fss_check_origin(fio_http_s *h) {
+  if (fss_origin_ok(h))
+    return 0;
   fss_send_error(h, 403, "bad_origin", "cross-origin request rejected");
   return -1;
 }

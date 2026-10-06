@@ -26,4 +26,7 @@ void api_spot_show(fio_http_s *h, fss_params_s *p);
 void api_spot_claims_create(fio_http_s *h, fss_params_s *p);
 void api_claim_vote(fio_http_s *h, fss_params_s *p);
 
+/* api_reports.c */
+void api_spot_reports_create(fio_http_s *h, fss_params_s *p);
+
 #endif /* FSS_API_H */

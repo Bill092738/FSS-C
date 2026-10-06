@@ -79,8 +79,32 @@ FIOBJ fss_body_json(fio_http_s *h) {
   return o;
 }
 
-int64_t fss_now_ms(void) {
+int FSS_TEST_CLOCK = 0;
+static __thread int64_t tl_now_override;
+
+int64_t fss_wall_ms(void) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
+
+int64_t fss_now_ms(void) {
+  return tl_now_override ? tl_now_override : fss_wall_ms();
+}
+
+int fss_clock_from_request(fio_http_s *h) {
+  if (!FSS_TEST_CLOCK)
+    return 0;
+  fio_str_info_s v = fio_http_request_header(h, FIO_STR_INFO1("x-fss-now"), 0);
+  if (!v.len)
+    return 0;
+  int64_t ms;
+  if (fss_parse_i64(v.buf, v.len, &ms) || ms <= 0) {
+    fss_send_error(h, 400, "bad_clock", "X-FSS-Now must be epoch milliseconds");
+    return -1;
+  }
+  tl_now_override = ms;
+  return 0;
+}
+
+void fss_clock_reset(void) { tl_now_override = 0; }

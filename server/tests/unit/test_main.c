@@ -8,6 +8,9 @@ void test_router(void);
 void test_util(void);
 void test_rules(void);
 void test_fts(void);
+void test_geo(void);
+void test_fence(void);
+void test_estimate(void);
 
 static const struct {
   const char *name;
@@ -17,6 +20,9 @@ static const struct {
     {"util", test_util},
     {"rules", test_rules},
     {"fts", test_fts},
+    {"geo", test_geo},
+    {"fence", test_fence},
+    {"estimate", test_estimate},
 };
 
 int main(void) {

@@ -27,6 +27,24 @@ static const struct {
     {"search_w_dist", R_DOUBLE, &FSS_RULES.search_w_dist},
     {"search_w_quality", R_DOUBLE, &FSS_RULES.search_w_quality},
     {"session_ttl_ms", R_I64, &FSS_RULES.session_ttl_ms},
+    {"fence_acc_inside", R_DOUBLE, &FSS_RULES.fence_acc_inside},
+    {"fence_acc_near", R_DOUBLE, &FSS_RULES.fence_acc_near},
+    {"fence_g_inside", R_DOUBLE, &FSS_RULES.fence_g_inside},
+    {"fence_g_near", R_DOUBLE, &FSS_RULES.fence_g_near},
+    {"fence_g_outside", R_DOUBLE, &FSS_RULES.fence_g_outside},
+    {"live_half_life_ms", R_I64, &FSS_RULES.live_half_life_ms},
+    {"live_window_ms", R_I64, &FSS_RULES.live_window_ms},
+    {"live_prior_weight", R_DOUBLE, &FSS_RULES.live_prior_weight},
+    {"live_basis_min_w", R_DOUBLE, &FSS_RULES.live_basis_min_w},
+    {"live_default_forecast", R_DOUBLE, &FSS_RULES.live_default_forecast},
+    {"event_ttl_ms", R_I64, &FSS_RULES.event_ttl_ms},
+    {"event_min_users", R_INT, &FSS_RULES.event_min_users},
+    {"event_trusted_rep", R_DOUBLE, &FSS_RULES.event_trusted_rep},
+    {"report_dedupe_ms", R_I64, &FSS_RULES.report_dedupe_ms},
+    {"report_max_buildings", R_INT, &FSS_RULES.report_max_buildings},
+    {"ws_max_subs", R_INT, &FSS_RULES.ws_max_subs},
+    {"job_live_decay_ms", R_I64, &FSS_RULES.job_live_decay_ms},
+    {"job_wal_checkpoint_ms", R_I64, &FSS_RULES.job_wal_checkpoint_ms},
 };
 
 static int apply_field(fiobj_each_s *e) {
@@ -60,11 +78,33 @@ static int apply_field(fiobj_each_s *e) {
   return 0;
 }
 
+/* Rejects values that would divide by zero or break timers. */
+static int rules_validate(void) {
+  const fss_rules_s *r = &FSS_RULES;
+  const char *bad = NULL;
+  if (r->live_half_life_ms <= 0)
+    bad = "live_half_life_ms must be > 0";
+  else if (r->live_window_ms <= 0)
+    bad = "live_window_ms must be > 0";
+  else if (r->live_prior_weight < 0)
+    bad = "live_prior_weight must be >= 0";
+  else if (r->event_ttl_ms <= 0 || r->event_min_users < 1)
+    bad = "event_ttl_ms and event_min_users must be positive";
+  else if (r->ws_max_subs < 1)
+    bad = "ws_max_subs must be >= 1";
+  else if (r->job_live_decay_ms < 100 || r->job_live_decay_ms > 86400000 ||
+           r->job_wal_checkpoint_ms < 100 || r->job_wal_checkpoint_ms > 86400000)
+    bad = "job intervals must be between 100 ms and 24 h";
+  if (bad)
+    FIO_LOG_ERROR("rules: %s", bad);
+  return bad ? -1 : 0;
+}
+
 int fss_rules_load(const char *path) {
   FILE *f = fopen(path, "rb");
   if (!f) {
     FIO_LOG_INFO("no rules file at %s, using built-in defaults", path);
-    return 0;
+    return rules_validate();
   }
   char buf[1 << 16];
   size_t len = fread(buf, 1, sizeof(buf), f);
@@ -83,5 +123,5 @@ int fss_rules_load(const char *path) {
   int errors = 0;
   fiobj_each1(o, apply_field, &errors, 0);
   fiobj_free(o);
-  return errors ? -1 : 0;
+  return errors ? -1 : rules_validate();
 }

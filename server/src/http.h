@@ -37,7 +37,19 @@ long fss_query(fio_http_s *h, const char *name, char *out, size_t cap);
  * a 400/415 response) when the body is not a JSON object. */
 FIOBJ fss_body_json(fio_http_s *h);
 
-/* Current time in milliseconds since the epoch. */
+/* Current time in milliseconds since the epoch. On a server started with
+ * --test-clock, an API request's `X-FSS-Now` header (epoch ms) replaces it for
+ * the duration of that request (roadmap 10.4). */
 int64_t fss_now_ms(void);
+/* Real wall-clock time; never overridden. */
+int64_t fss_wall_ms(void);
+
+/* Set once at startup (--test-clock); off by default. */
+extern int FSS_TEST_CLOCK;
+/* Applies the request's X-FSS-Now header to the calling thread (if enabled).
+ * Returns -1 (after sending 400) when the header is malformed. */
+int fss_clock_from_request(fio_http_s *h);
+/* Clears the calling thread's override. */
+void fss_clock_reset(void);
 
 #endif /* FSS_HTTP_H */
