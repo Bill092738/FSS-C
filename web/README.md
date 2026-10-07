@@ -22,7 +22,7 @@ make web-test # typecheck, lint, unit tests
 
 Inside `web/`: `npm run dev | build | typecheck | lint | test`.
 
-The Vite dev server proxies `/api` and `/ws` to `FSS_BACKEND` (default
+The Vite dev server proxies `/api`, `/ws` and `/uploads` (photos) to `FSS_BACKEND` (default
 `http://localhost:8080`). The proxy keeps the browser's `Host` header
 (`changeOrigin: false`) because the backend rejects writes whose `Origin` host
 differs from `Host`.
@@ -41,7 +41,10 @@ policy).
 | Crowd and event reports with browser geolocation | Working (`POST /spots/:id/reports`) |
 | Register, log in/out, profile, karma, reputation, badges | Working |
 | Suggest a new spot | Working; buildings come from existing spots (no buildings endpoint yet) |
-| Check-in, photos, karma history | Placeholder (M4) |
+| Check-in with a heartbeat every 10 min while the app is open (any page), people present | Working (`POST /checkins`, `/checkins/:id/heartbeat`, `/checkins/:id/end`) |
+| Photos: upload (raw image body), votes; vote buttons hidden on your own photos | Working (`POST /spots/:id/photos`, `POST /photos/:id/vote`, `/uploads/*`) |
+| Confirm a suggested spot | Working (`POST /spots/:id/confirm`) |
+| Karma history, karma and badge toasts | Working (`GET /me/karma`, `{"t":"karma"}` / `{"t":"badge"}` on `user:{id}`) |
 | Forecast curve, Study With Me, heatmap | Placeholder (M5) |
 | Coupons, merchant redeem, admin insights | Placeholder (M6) |
 
@@ -55,14 +58,17 @@ from `src/lib/features.ts`. When the backend ships one, add the call to
 src/
   main.tsx              providers: React Query, LiveProvider, router
   app/                  router (pages of roadmap 10.2) and the app shell
-  pages/                one file per page; PlaceholderPages.tsx for M4–M6
-  components/           map, filters, report panel, claims, UI primitives
+  pages/                one file per page; PlaceholderPages.tsx for M5–M6
+  components/           map, filters, report panel, claims, check-in, photos,
+                        spot confirmation, karma history, toasts, UI primitives
   lib/
     api.ts              typed REST client and the error envelope (ApiError)
     types.ts            response shapes, kept in sync with server/src/api_*.c
     live.ts             WebSocket client: ref-counted channels, reconnect, `since` replay
     liveContext.ts      React hooks; applies pushes to the query cache
     queries.ts          React Query hooks and the selected campus
+    checkin.ts          check-in mutations and the app-wide heartbeat
+    karma.ts            karma reason labels and toast texts
     features.ts         registry of not-yet-built features
     filters.ts, attrs.ts, geo.ts, auth.ts
 ```

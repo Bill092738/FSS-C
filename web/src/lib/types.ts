@@ -97,6 +97,16 @@ export interface SpotEvent {
   until: number
 }
 
+export interface Photo {
+  id: number
+  /** Uploader; users cannot vote on their own photos. */
+  user: number
+  url: string
+  up: number
+  down: number
+  at: number
+}
+
 export interface SpotDetail extends SpotBase {
   status: 'active' | 'hidden' | 'merged'
   campus: string
@@ -108,7 +118,75 @@ export interface SpotDetail extends SpotBase {
   cons: string[]
   events: SpotEvent[]
   claims: Claim[]
+  /** Open verified check-ins (roadmap 7.4). */
+  present: number
+  /** Confirmations of a submitted spot; it turns active at 2. */
+  confirmations: number
+  /** Visible photos, best voted first (at most 20). */
+  photos: Photo[]
   updated_at: number
+}
+
+export type CheckinEndReason = 'user' | 'outside' | 'timeout' | 'stale'
+
+export interface Checkin {
+  id: number
+  spot: number
+  start_at: number
+  end_at: number | null
+  end_reason: CheckinEndReason | null
+  last_beat_at: number | null
+  in_fence: boolean
+  verified: boolean
+  /** Time credited between two in-fence positions. */
+  verified_ms: number
+  outside_beats: number
+}
+
+/** The open check-in as embedded in GET /me. */
+export type OpenCheckin = Pick<Checkin, 'id' | 'spot' | 'start_at' | 'last_beat_at' | 'verified' | 'verified_ms'>
+
+export interface CheckinResult {
+  checkin: Checkin
+  live?: LiveState
+  /** Points credited when the session ended. */
+  karma?: number
+}
+
+export interface PhotoResult {
+  photo: Photo & { spot: number; p: number; status: 'visible' | 'hidden' }
+  karma?: number
+}
+
+export interface ConfirmResult {
+  spot_id: number
+  status: 'active' | 'hidden'
+  confirmations: number
+  needed: number
+}
+
+export type KarmaReason =
+  | 'report'
+  | 'event_confirmed'
+  | 'photo'
+  | 'photo_hidden'
+  | 'claim_accepted'
+  | 'spot_discovered'
+  | 'checkin'
+
+export interface KarmaEntry {
+  id: number
+  delta: number
+  reason: KarmaReason
+  ref_type: string
+  ref_id: number
+  at: number
+}
+
+export interface KarmaPage {
+  karma: number
+  entries: KarmaEntry[]
+  next: string | null
 }
 
 export interface Badge {
@@ -129,6 +207,7 @@ export interface User {
   reputation: number
   karma: number
   badges: Badge[]
+  checkin: OpenCheckin | null
 }
 
 export interface ReportResult {
@@ -142,6 +221,8 @@ export interface ReportResult {
     weight: number
     at: number
   }
+  /** Karma credited for this report (roadmap 7.5). */
+  karma: number
   live?: LiveState
   event?: { kind: EventKind; visible: boolean; reports: number; until: number }
 }
@@ -154,6 +235,7 @@ export interface ClaimVoteResult {
 export type ServerMessage =
   | { t: 'live'; spot: number; color: CrowdColor; est: number; conf: number; basis: LiveBasis; at: number }
   | { t: 'event'; spot: number; kind: EventKind; until: number; reports: number; at: number }
-  | { t: 'karma'; delta: number; total: number; at?: number }
+  | { t: 'karma'; delta: number; total: number; reason?: KarmaReason; at?: number }
+  | { t: 'badge'; key: string; name: string; at?: number }
   | { t: 'ok'; op: string; ch?: string; buildings?: number[] }
   | { t: 'error'; op?: string; code: string; message: string }

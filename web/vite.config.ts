@@ -14,6 +14,7 @@ export default defineConfig({
     // Host: localhost:5173 must reach it unchanged.
     proxy: {
       '/api': { target: backend, changeOrigin: false },
+      '/uploads': { target: backend },
       '/ws': { target: backend.replace(/^http/, 'ws'), ws: true, changeOrigin: false },
     },
   },

@@ -1,8 +1,11 @@
 import { Link, useParams } from 'react-router'
 
+import { CheckinPanel } from '../components/CheckinPanel'
 import { Claims } from '../components/Claims'
 import { ComingSoon } from '../components/ComingSoon'
+import { ConfirmSpot } from '../components/ConfirmSpot'
 import { CrowdBadge } from '../components/CrowdBadge'
+import { Photos } from '../components/Photos'
 import { ReportPanel } from '../components/ReportPanel'
 import { ApiError } from '../lib/api'
 import { Card, ErrorBox, Loading } from '../components/ui'
@@ -86,11 +89,7 @@ export function SpotPage() {
         ← Back to map
       </Link>
 
-      {s.status === 'hidden' && (
-        <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">
-          This spot was suggested by a student and is waiting for others to confirm it. It does not appear in search yet.
-        </div>
-      )}
+      {s.status === 'hidden' && <ConfirmSpot spot={s} />}
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -142,9 +141,9 @@ export function SpotPage() {
           <Claims spot={s} attrs={attrs} />
         </div>
         <aside className="space-y-4">
-          <ComingSoon feature="checkins" compact />
+          <CheckinPanel spot={s} />
           <ComingSoon feature="forecast" compact />
-          <ComingSoon feature="photos" compact />
+          <Photos spot={s} />
           <Card>
             <h2 className="font-semibold">Building hours</h2>
             <Hours hours={s.building.hours} />

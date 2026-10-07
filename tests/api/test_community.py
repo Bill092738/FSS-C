@@ -224,7 +224,9 @@ def test_photo_upload_serve_and_dedupe(demo):
     assert served.status == 200 and served.body == data
     assert served.headers["content-type"].startswith("image/png")
     assert (demo.uploads / photo["url"].rsplit("/", 1)[1]).read_bytes() == data
-    assert [p["id"] for p in demo.get("/api/v1/spots/2").json()["spot"]["photos"]] == [photo["id"]]
+    listed = demo.get("/api/v1/spots/2").json()["spot"]["photos"]
+    assert [p["id"] for p in listed] == [photo["id"]]
+    assert listed[0]["user"] == photo["user"] == me(c)["id"]
 
     r = upload(user(demo), 3, data, t)
     assert r.status == 409 and r.json()["error"]["photo_id"] == photo["id"]

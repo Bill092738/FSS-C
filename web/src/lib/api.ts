@@ -1,9 +1,13 @@
 import type {
   Campus,
   CampusSummary,
+  CheckinResult,
   ClaimValue,
   ClaimVoteResult,
+  ConfirmResult,
   EventKind,
+  KarmaPage,
+  PhotoResult,
   ReportResult,
   SpotDetail,
   SpotList,
@@ -27,9 +31,19 @@ export class ApiError extends Error {
   }
 }
 
+/** A request body sent as is (photo uploads) instead of JSON. */
+export interface RawBody {
+  raw: Blob
+  type: string
+}
+
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, credentials: 'same-origin', headers: {} }
-  if (body !== undefined) {
+  if (body instanceof Object && 'raw' in body && body.raw instanceof Blob) {
+    const { raw, type } = body as RawBody
+    init.headers = { 'Content-Type': type }
+    init.body = raw
+  } else if (body !== undefined) {
     // Every write endpoint requires this content type (roadmap 10.5).
     init.headers = { 'Content-Type': 'application/json' }
     init.body = JSON.stringify(body)
@@ -110,7 +124,11 @@ export interface NewSpot {
   claims?: { attr: string; value: ClaimValue; evidence?: string }[]
 }
 
-/** Endpoints the backend implements today (M0, M2, M3). */
+/** Image types POST /spots/:id/photos accepts (checked by magic bytes). */
+export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+export const PHOTO_MAX_BYTES = 5 << 20
+
+/** Endpoints the backend implements today (M0, M2, M3, M4). */
 export const api = {
   health: () => request<{ ok: boolean; schema: number; now: number }>('GET', '/health'),
   campuses: () => request<{ campuses: CampusSummary[] }>('GET', '/campuses'),
@@ -133,4 +151,14 @@ export const api = {
     request<ReportResult>('POST', `/spots/${spotId}/reports`, { level, ...pos }),
   reportEvent: (spotId: number, event: EventKind, pos?: Position) =>
     request<ReportResult>('POST', `/spots/${spotId}/reports`, { event, ...pos }),
+
+  checkin: (spotId: number, pos?: Position) => request<CheckinResult>('POST', '/checkins', { spot_id: spotId, ...pos }),
+  heartbeat: (id: number, pos?: Position) => request<CheckinResult>('POST', `/checkins/${id}/heartbeat`, { ...pos }),
+  endCheckin: (id: number) => request<CheckinResult>('POST', `/checkins/${id}/end`, {}),
+  confirmSpot: (spotId: number) => request<ConfirmResult>('POST', `/spots/${spotId}/confirm`, {}),
+  uploadPhoto: (spotId: number, file: Blob) =>
+    request<PhotoResult>('POST', `/spots/${spotId}/photos`, { raw: file, type: file.type } satisfies RawBody),
+  votePhoto: (photoId: number, v: 1 | -1 | 0) => request<PhotoResult>('POST', `/photos/${photoId}/vote`, { v }),
+  karma: (cursor?: string) =>
+    request<KarmaPage>('GET', '/me/karma' + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : '')),
 }

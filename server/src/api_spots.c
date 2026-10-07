@@ -319,7 +319,7 @@ static const char SQL_SPOT_SHOW[] =
     " 'confirmations', (SELECT count(*) FROM spot_confirm sc"
     "    WHERE sc.spot_id = s.id),"
     " 'photos', (SELECT json_group_array(json_object('id', ph.id,"
-    "    'url', '/uploads/' || ph.path, 'up', round(ph.up, 2),"
+    "    'user', ph.user_id, 'url', '/uploads/' || ph.path, 'up', round(ph.up, 2),"
     "    'down', round(ph.down, 2), 'at', ph.at)) FROM (SELECT * FROM photo"
     "    WHERE spot_id = s.id AND status = 'visible'"
     "    ORDER BY up - down DESC, at DESC LIMIT 20) ph),"

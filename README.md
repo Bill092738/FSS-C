@@ -13,7 +13,7 @@ The web front-end in `web/` uses React, TypeScript, Tailwind CSS and Vite.
 
 > **Status: work in progress.** Part of the backend works today: the
 > foundation (M0), the core API (M2), real-time occupancy (M3) and the
-> community features (M4). The web front-end covers M0–M3 and shows
+> community features (M4). The web front-end covers M0–M4 and shows
 > placeholders for the rest. The data pipeline, forecasts and everything after
 > are not built yet. See [PROGRESS.md](PROGRESS.md) for details.
 
@@ -41,12 +41,11 @@ The web front-end in `web/` uses React, TypeScript, Tailwind CSS and Vite.
   cheating users (`tests/sim/simulate.py`)
 - The web app ([web/README.md](web/README.md)): map and list with live crowd
   colors, search and filters, spot details with claims and votes, crowd and
-  event reports with geolocation, accounts and profile; placeholders for the
-  features below
+  event reports with geolocation, check-ins, photos, spot confirmation,
+  accounts, profile and karma history; placeholders for the features below
 
 ## What does not work yet
 
-- Check-ins, photos and karma in the web app (the API exists)
 - Forecasts from history, heatmaps, Study With Me (M5); until then the
   estimate falls back to the spot's typical crowd level
 - Offers, merchant/admin tools (M6)

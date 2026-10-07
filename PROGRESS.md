@@ -17,7 +17,7 @@ in parallel: M2 starts on a hand-made seed (roadmap 11).
 | M1 | Phase 0 pipeline (collect, buildings, extract, resolve, load) for OSU | 6 | 100+ active spots loaded; 100-claim audit ≥ 90% | Not started |
 | M2 | Core API: auth, campuses, spot search/detail, claims + votes + materialization, dev seed | 5.3, 7.1, 7.6 (claims), 9.1, 10.5 | pytest covers search filters, auth, claim materialization | **Done** (IP rate limit on `/auth/*` moved to M4) |
 | M3 | Real time: reports, geofence, occupancy estimate, WebSocket + Pub/Sub, timers | 4.5, 4.6, 7.2, 7.3, 9.2 | two-client WebSocket test sees color change; replay with `since` | **Done** (forecast prior is the spot's `crowd_typical` until M5) |
-| M4 | Community: check-ins, karma ledger, badges, reputation, rate limits (incl. `/auth/*` per IP), photos, spot discovery confirmation | 7.4–7.6, 10.5 | idempotency + rate-limit tests; simulator shows cheaters suppressed | **Done** (backend; web wiring in progress) |
+| M4 | Community: check-ins, karma ledger, badges, reputation, rate limits (incl. `/auth/*` per IP), photos, spot discovery confirmation | 7.4–7.6, 10.5 | idempotency + rate-limit tests; simulator shows cheaters suppressed | **Done** |
 | M5 | Forecast and Phase 2: hourly rollup, forecast, Study With Me, heatmap (k-anonymity) | 7.7, 8.1, 8.2 | forecast endpoint on simulated history; k=5 filter tests | Not started |
 | M6 | Monetization, front-end, load test: offers/coupons, merchant redeem, admin insights + CSV, web app, k6 | 8.3, 8.4, 10.2, 10.4 | end-to-end demo; k6 report written back into docs | Not started (web app started early, see below) |
 
@@ -228,12 +228,20 @@ cluster at the same spots, because the consensus there is weak or wrong.
 
 ### Web front-end (roadmap 10.2, started ahead of M6)
 
-`web/` covers everything M0–M3 serve, with placeholders for M4–M6 features
+`web/` covers everything M0–M4 serve, with placeholders for M5–M6 features
 listed in `web/src/lib/features.ts`. Details in [web/README.md](web/README.md).
 
 - `make dev` runs the backend and Vite (proxying `/api` and `/ws`); `make web`
   builds `web/dist`, which the C binary serves with SPA fallback; `make
-  web-test` runs typecheck, oxlint and 18 Vitest tests.
+  web-test` runs typecheck, oxlint and 27 Vitest tests.
+- M4 in the app: check-in panel (the app shell sends a heartbeat with the
+  position every 10 minutes while a session is open), photos with votes,
+  confirmation of suggested spots, karma history on the profile, karma and
+  badge toasts from `user:{id}`. Checked in Chromium against the C binary
+  serving `web/dist`: 20 of 20 end-to-end checks pass (check-in, presence,
+  karma and badge pushes, photo upload and serving, own-photo voting hidden,
+  check-out, photo vote, spot confirmation by two users, karma history, no
+  console errors).
 - Live updates: the map sends `view` for its viewport and the detail page
   subscribes `spot:{id}`; pushes update the React Query cache in place. The
   socket reconnects with backoff and re-subscribes with `since`.
@@ -374,13 +382,10 @@ tokenizer would fix this if needed.
 
 ## Next steps
 
-1. Web: check-in button with background heartbeat, karma toasts from
-   `user:{id}`, karma history, photos, spot confirmation (placeholders in
-   `web/src/lib/features.ts`).
-2. M5: `hourly_rollup` also aggregates `occupancy_hourly`; `forecast_slot`
+1. M5: `hourly_rollup` also aggregates `occupancy_hourly`; `forecast_slot`
    replaces the `crowd_typical` prior.
-3. M1 pipeline can start any time; it only needs the schema.
-4. Reports still have no per-user frequency cap besides the building limit,
+2. M1 pipeline can start any time; it only needs the schema.
+3. Reports still have no per-user frequency cap besides the building limit,
    the dedupe window and the karma cap.
 
 ## Open questions

@@ -154,7 +154,8 @@ static const char SQL_PHOTO_INSERT[] =
     "INSERT INTO photo (spot_id, user_id, path, sha256, at)"
     " VALUES (?1, ?2, ?3, ?4, ?5)";
 static const char SQL_PHOTO_JSON[] =
-    "SELECT json_object('id', id, 'spot', spot_id, 'url', '/uploads/' || path,"
+    "SELECT json_object('id', id, 'spot', spot_id, 'user', user_id,"
+    " 'url', '/uploads/' || path,"
     " 'up', round(up, 2), 'down', round(down, 2),"
     " 'p', round(fss_conf(?2, up, down), 3), 'status', status, 'at', at)"
     " FROM photo WHERE id = ?1";
