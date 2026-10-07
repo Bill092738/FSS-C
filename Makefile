@@ -1,7 +1,7 @@
 # FSS monorepo entry points (roadmap 10.3). Run from the repository root.
 PY ?= .venv/bin/python
 
-.PHONY: all server debug unit api test run seed clean
+.PHONY: all server debug unit api test run seed clean web web-test dev
 all: server
 
 server:
@@ -30,3 +30,20 @@ seed: server
 
 clean:
 	@$(MAKE) --no-print-directory -C server clean
+
+# Front-end (web/): Vite + React + TypeScript + Tailwind. Needs Node 20+.
+web/node_modules: web/package-lock.json
+	cd web && npm ci
+	@touch $@
+
+# Builds web/dist, which `make run` serves (with SPA fallback) on :8080.
+web: web/node_modules
+	cd web && npm run build
+
+web-test: web/node_modules
+	cd web && npm run typecheck && npm run lint && npm test
+
+# Backend on :8080 and the Vite dev server on :5173, which proxies /api and
+# /ws to it (roadmap 10.3). Open http://localhost:5173. Ctrl-C stops both.
+dev: server web/node_modules
+	@trap 'kill 0' INT TERM EXIT; server/build/fss & cd web && npm run dev

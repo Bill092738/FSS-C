@@ -9,10 +9,13 @@ Planned features add check-ins and karma.
 The backend is a single C executable built on
 [facil.io cstl](https://github.com/facil-io/cstl) with one SQLite database file.
 
-> **Status: work in progress.** Only part of the backend works today: the
-> foundation (M0), the core API (M2) and real-time occupancy (M3). The data
-> pipeline, check-ins, karma, the web front-end and everything else are not
-> built yet. See [PROGRESS.md](PROGRESS.md) for details.
+The web front-end in `web/` uses React, TypeScript, Tailwind CSS and Vite.
+
+> **Status: work in progress.** Part of the backend works today: the
+> foundation (M0), the core API (M2) and real-time occupancy (M3). The web
+> front-end covers those features and shows placeholders for the rest. The
+> data pipeline, check-ins, karma and everything else are not built yet. See
+> [PROGRESS.md](PROGRESS.md) for details.
 
 ## What works
 
@@ -28,21 +31,25 @@ The backend is a single C executable built on
 - WebSocket push on `/ws`: subscribe to a spot, a building or a map viewport;
   reconnecting clients can replay missed messages with `since`
 - A synthetic "Demo University" seed (not real data)
+- The web app ([web/README.md](web/README.md)): map and list with live crowd
+  colors, search and filters, spot details with claims and votes, crowd and
+  event reports with geolocation, accounts and profile; placeholders for the
+  features below
 
 ## What does not work yet
 
 - Check-ins, karma, badges, rate limits on `/auth/*` (M4)
 - Forecasts from history, heatmaps, Study With Me (M5); until then the
   estimate falls back to the spot's typical crowd level
-- Offers, merchant/admin tools, the web app (M6)
-- The data pipeline that loads real campus data (M1); `pipeline/` and `web/`
-  are empty
+- Offers, merchant/admin tools (M6)
+- The data pipeline that loads real campus data (M1); `pipeline/` is empty
 
 ## Requirements
 
 - Linux, `make`, gcc (clang for the sanitizer build)
 - OpenSSL development libraries (`-lssl -lcrypto`)
 - Python 3 for the API tests
+- Node.js 20+ for the web front-end
 
 cstl and SQLite are vendored in `server/vendor/`.
 
@@ -55,7 +62,14 @@ make seed       # create data/fss.db from the demo fixture
 make run        # serve on http://0.0.0.0:8080
 ```
 
-Then try:
+For the web app:
+
+```sh
+make dev        # backend on :8080 and Vite on :5173; open http://localhost:5173
+make web        # or build web/dist, which `make run` then serves on :8080
+```
+
+Or try the API directly:
 
 ```sh
 curl http://localhost:8080/api/v1/health
@@ -74,6 +88,7 @@ make test       # C unit tests + pytest API tests
 make debug      # ASan/UBSan build at server/build/fss-debug
 FSS_BIN=server/build/fss-debug make api
 make debug test SAN_CC=gcc   # if clang's sanitizer runtime is not installed
+make web-test   # front-end typecheck, lint and unit tests
 ```
 
 ## Layout
@@ -83,7 +98,7 @@ server/        C backend (src/, migrations/, config/rules.json, vendor/)
 tests/api/     pytest black-box API tests
 data/seed/     demo seed data
 pipeline/      data pipeline (not started)
-web/           front-end (not started)
+web/           front-end: React + TypeScript + Tailwind (Vite)
 ```
 
 ## Docs

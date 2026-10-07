@@ -19,7 +19,7 @@ in parallel: M2 starts on a hand-made seed (roadmap 11).
 | M3 | Real time: reports, geofence, occupancy estimate, WebSocket + Pub/Sub, timers | 4.5, 4.6, 7.2, 7.3, 9.2 | two-client WebSocket test sees color change; replay with `since` | **Done** (forecast prior is the spot's `crowd_typical` until M5) |
 | M4 | Community: check-ins, karma ledger, badges, reputation, rate limits (incl. `/auth/*` per IP), photos, spot discovery confirmation | 7.4–7.6, 10.5 | idempotency + rate-limit tests; simulator shows cheaters suppressed | Next |
 | M5 | Forecast and Phase 2: hourly rollup, forecast, Study With Me, heatmap (k-anonymity) | 7.7, 8.1, 8.2 | forecast endpoint on simulated history; k=5 filter tests | Not started |
-| M6 | Monetization, front-end, load test: offers/coupons, merchant redeem, admin insights + CSV, web app, k6 | 8.3, 8.4, 10.2, 10.4 | end-to-end demo; k6 report written back into docs | Not started |
+| M6 | Monetization, front-end, load test: offers/coupons, merchant redeem, admin insights + CSV, web app, k6 | 8.3, 8.4, 10.2, 10.4 | end-to-end demo; k6 report written back into docs | Not started (web app started early, see below) |
 
 ## How to run
 
@@ -127,6 +127,21 @@ mismatching `Origin` (roadmap 10.5).
 - **Test clock (10.4):** with `--test-clock`, an API request's `X-FSS-Now`
   header (epoch ms) is the request's clock.
 
+### Web front-end (roadmap 10.2, started ahead of M6)
+
+`web/` covers everything M0–M3 serve, with placeholders for M4–M6 features
+listed in `web/src/lib/features.ts`. Details in [web/README.md](web/README.md).
+
+- `make dev` runs the backend and Vite (proxying `/api` and `/ws`); `make web`
+  builds `web/dist`, which the C binary serves with SPA fallback; `make
+  web-test` runs typecheck, oxlint and 18 Vitest tests.
+- Live updates: the map sends `view` for its viewport and the detail page
+  subscribes `spot:{id}`; pushes update the React Query cache in place. The
+  socket reconnects with backoff and re-subscribes with `since`.
+- Checked in Chromium against the real backend (dev proxy and the C binary
+  serving `web/dist`): 19 of 20 end-to-end checks pass; the failing one is
+  the subscription bug below.
+
 ## Decisions and deviations from the roadmap
 
 | Topic | Roadmap | Implemented | Reason |
@@ -157,6 +172,8 @@ mismatching `Origin` (roadmap 10.5).
 | `campus:{slug}:live` | channel for map viewers | not published; `view` subscribes to `bldg:*` | 9.2 defines `view` through building channels; avoids a campus-wide broadcast |
 | `since` / `at` | epoch ms passed to `replay_since` | `at` = publish tick + fixed epoch offset; `since` converted back | cstl Pub/Sub timestamps are monotonic ms (see notes) |
 | Job timers | `fio_io_run_every` on the IO thread + `fio_io_async` | `fio_io_async_every` on the job queue | the documented helper does both steps |
+| Front-end framework | Vite + Preact + MapLibre | Vite + React 19 + TypeScript + Tailwind CSS 4 + MapLibre | project decision when the web app started |
+| Buildings for new spots | not specified | the new-spot form lists buildings of active spots | no endpoint lists a campus's buildings yet |
 
 Known limitation: FTS uses `unicode61` as specified, which does not segment
 Chinese text; a query token must equal a whole token (e.g. the tag "白板"
@@ -226,6 +243,21 @@ tokenizer would fix this if needed.
   was active; one worker could end up without a connection (503s). Fixed by
   calling `sqlite3_busy_timeout` before any PRAGMA; a worker that still cannot
   open the database now stops the server instead of serving 503s.
+
+## Open bugs
+
+- **WebSocket: a disconnect drops the channel for every other subscriber.**
+  Two connections subscribe to `spot:1` (or `bldg:1`, also through `view`);
+  one closes; a report that changes spot 1's color reaches nobody. Without the
+  close both receive it. Same result with cstl `a24d0be` and the version
+  before it, so it is not caused by the vendor bump. `ws.c` relies on cstl to
+  release a closed connection's subscriptions (`fss_ws_on_close`), so the
+  cause is probably in that release path. No API test covers two subscribers
+  with one leaving. The web app refetches every 60 s as a fallback.
+- **WebSocket close frames echo the reserved code 1005** when the client's
+  close frame has no status code (cstl's parser stores 1005 for an empty
+  payload, `fio-stl.h` near line 24134, and the echo sends it). Browsers
+  reject the frame. The web client closes with 1000.
 
 ## Next steps
 
