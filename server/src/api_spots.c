@@ -3,7 +3,9 @@
 
 #include "attrs.h"
 #include "auth.h"
+#include "community.h"
 #include "db.h"
+#include "live.h"
 #include "rules.h"
 #include "spots.h"
 #include "util.h"
@@ -310,6 +312,17 @@ static const char SQL_SPOT_SHOW[] =
     "    FROM report r WHERE r.spot_id = s.id AND r.event IS NOT NULL"
     "      AND r.at > ?2 - ?6 AND r.at <= ?2 GROUP BY r.event) e"
     "    WHERE e.users >= ?5 OR e.trusted),"
+    /* roadmap 7.4 / 7.5: people checked in, confirmations of a submitted
+     * spot, visible photos (best first) */
+    " 'present', (SELECT count(*) FROM checkin k WHERE k.spot_id = s.id"
+    "    AND k.end_at IS NULL AND k.verified = 1),"
+    " 'confirmations', (SELECT count(*) FROM spot_confirm sc"
+    "    WHERE sc.spot_id = s.id),"
+    " 'photos', (SELECT json_group_array(json_object('id', ph.id,"
+    "    'url', '/uploads/' || ph.path, 'up', round(ph.up, 2),"
+    "    'down', round(ph.down, 2), 'at', ph.at)) FROM (SELECT * FROM photo"
+    "    WHERE spot_id = s.id AND status = 'visible'"
+    "    ORDER BY up - down DESC, at DESC LIMIT 20) ph),"
     " 'claims', (SELECT json_group_array(json_object("
     "    'id', cl.id, 'attr', cl.attr, 'value', json(cl.value),"
     "    'source', cl.source, 'evidence', cl.evidence, 'url', sd.url,"
@@ -513,13 +526,6 @@ Votes: POST /claims/:id/vote {"v": 1 | -1 | 0}
 static const char SQL_CLAIM_INFO[] =
     "SELECT c.spot_id, c.user_id, s.building_id FROM claim c"
     " JOIN spot s ON s.id = c.spot_id WHERE c.id = ?1";
-/* Voter weight: reputation x boost when the voter has a verified check-in in
- * the claim's building (roadmap 7.6). */
-static const char SQL_VOTER_WEIGHT[] =
-    "SELECT u.reputation * CASE WHEN EXISTS ("
-    "  SELECT 1 FROM checkin k JOIN spot s2 ON s2.id = k.spot_id"
-    "  WHERE k.user_id = u.id AND k.verified = 1 AND s2.building_id = ?2)"
-    " THEN ?3 ELSE 1.0 END FROM user u WHERE u.id = ?1";
 static const char SQL_VOTE_UPSERT[] =
     "INSERT INTO claim_vote (claim_id, user_id, v, weight, at)"
     " VALUES (?1, ?2, ?3, ?4, ?5)"
@@ -534,10 +540,51 @@ static const char SQL_CLAIM_TALLY[] =
     " down = COALESCE((SELECT sum(weight) FROM claim_vote"
     "   WHERE claim_id = ?1 AND v = -1), 0)"
     " WHERE id = ?1";
+/* The author's standing after a vote (roadmap 7.5 / 7.6). */
+static const char SQL_CLAIM_STATE[] =
+    "SELECT c.user_id, c.prior, c.up, c.down, (SELECT count(*) FROM claim_vote"
+    " WHERE claim_id = c.id AND v = 1) FROM claim c WHERE c.id = ?1";
 static const char SQL_CLAIM_JSON[] =
     "SELECT json_object('id', id, 'attr', attr, 'value', json(value),"
     " 'p', round(fss_conf(prior, up, down), 3), 'up', round(up, 2),"
     " 'down', round(down, 2)) FROM claim WHERE id = ?1";
+
+/* A user claim with karma_claim_min_up up votes is accepted: karma and
+ * reputation for its author; one that the votes reject costs reputation.
+ * Both are idempotent, so later votes do not repeat them. */
+static int claim_author_effects(int64_t claim, int64_t now, fss_outbox_s *box) {
+  sqlite3_stmt *st = fss_stmt(SQL_CLAIM_STATE);
+  if (!st)
+    return -1;
+  sqlite3_bind_int64(st, 1, claim);
+  int rc = sqlite3_step(st);
+  int64_t author = 0, ups = 0;
+  double prior = 0, up = 0, down = 0;
+  if (rc == SQLITE_ROW) {
+    author = sqlite3_column_int64(st, 0);
+    prior = sqlite3_column_double(st, 1);
+    up = sqlite3_column_double(st, 2);
+    down = sqlite3_column_double(st, 3);
+    ups = sqlite3_column_int64(st, 4);
+  }
+  fss_stmt_release(st);
+  if (rc != SQLITE_ROW)
+    return -1;
+  if (!author) /* pipeline and official claims */
+    return 0;
+  if (ups >= FSS_RULES.karma_claim_min_up &&
+      (fss_karma_award(author, FSS_RULES.karma_claim,
+                       (int64_t)FSS_RULES.karma_claim_daily * FSS_RULES.karma_claim,
+                       "claim_accepted", "claim", claim, now, box) < 0 ||
+       fss_rep_adjust(author, FSS_RULES.rep_accept, "claim_accepted", "claim",
+                      claim, now, box) < 0))
+    return -1;
+  if (fss_rejected_by_votes(prior, up, down) &&
+      fss_rep_adjust(author, -FSS_RULES.rep_reject, "claim_rejected", "claim",
+                     claim, now, box) < 0)
+    return -1;
+  return 0;
+}
 
 static int step_done(sqlite3_stmt *st) {
   int rc = st ? sqlite3_step(st) : SQLITE_ERROR;
@@ -562,6 +609,7 @@ void api_claim_vote(fio_http_s *h, fss_params_s *p) {
     return;
   }
   int64_t claim = p->num[0];
+  fss_outbox_s box = {0};
   if (fss_tx_begin() != SQLITE_OK) {
     fss_send_db_error(h);
     return;
@@ -592,14 +640,8 @@ void api_claim_vote(fio_http_s *h, fss_params_s *p) {
   }
 
   if (v) {
-    if (!(st = fss_stmt(SQL_VOTER_WEIGHT)))
-      goto db_error;
-    sqlite3_bind_int64(st, 1, uid);
-    sqlite3_bind_int64(st, 2, building);
-    sqlite3_bind_double(st, 3, FSS_RULES.vote_checkin_boost);
-    double weight = sqlite3_step(st) == SQLITE_ROW ? sqlite3_column_double(st, 0) : 0;
-    fss_stmt_release(st);
-    if (!(st = fss_stmt(SQL_VOTE_UPSERT)))
+    double weight = fss_voter_weight(uid, building);
+    if (weight < 0 || !(st = fss_stmt(SQL_VOTE_UPSERT)))
       goto db_error;
     sqlite3_bind_int64(st, 1, claim);
     sqlite3_bind_int64(st, 2, uid);
@@ -618,7 +660,8 @@ void api_claim_vote(fio_http_s *h, fss_params_s *p) {
   if (st)
     sqlite3_bind_int64(st, 1, claim);
   if (step_done(st) || fss_spot_materialize(spot) != SQLITE_OK ||
-      fss_tx_commit() != SQLITE_OK)
+      claim_author_effects(claim, fss_now_ms(), &box) ||
+      fss_live_commit(&box) != SQLITE_OK)
     goto db_error;
 
   if (!(st = fss_stmt(SQL_CLAIM_JSON))) {
@@ -639,6 +682,7 @@ void api_claim_vote(fio_http_s *h, fss_params_s *p) {
   return;
 
 db_error:
+  fss_outbox_clear(&box);
   fss_tx_rollback();
   fss_send_db_error(h);
 }
@@ -646,7 +690,8 @@ db_error:
 /* *****************************************************************************
 Submission: POST /spots {"building_id", "name", "floor"?, "lat"?, "lon"?,
                          "claims"?: [{"attr", "value"}]}
-New spots start hidden until other users confirm them (roadmap 7.5, M4).
+New spots start hidden until spot_confirm_min other users confirm them through
+POST /spots/:id/confirm (roadmap 7.5).
 ***************************************************************************** */
 
 static const char SQL_USER_SPOTS_TODAY[] =

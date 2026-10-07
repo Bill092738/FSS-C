@@ -7,5 +7,7 @@
 
 void *fss_http_udata2(fio_http_s *h);
 void *fss_http_udata2_set(fio_http_s *h, void *p);
+/* The connection's socket, or -1. */
+int fss_http_fd(fio_http_s *h);
 
 #endif /* FSS_FIO_EXT_H */

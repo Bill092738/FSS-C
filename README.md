@@ -4,7 +4,7 @@ FSS helps students find a place to study on campus. Spots (libraries, lounges,
 cafés, ...) have searchable attributes such as outlets, noise level and vibe.
 The attributes come from user claims and votes. Students on site report how
 crowded a spot is, and subscribed clients get the new state over a WebSocket.
-Planned features add check-ins and karma.
+Check-ins, karma, badges and a reputation score reward useful contributions.
 
 The backend is a single C executable built on
 [facil.io cstl](https://github.com/facil-io/cstl) with one SQLite database file.
@@ -12,10 +12,10 @@ The backend is a single C executable built on
 The web front-end in `web/` uses React, TypeScript, Tailwind CSS and Vite.
 
 > **Status: work in progress.** Part of the backend works today: the
-> foundation (M0), the core API (M2) and real-time occupancy (M3). The web
-> front-end covers those features and shows placeholders for the rest. The
-> data pipeline, check-ins, karma and everything else are not built yet. See
-> [PROGRESS.md](PROGRESS.md) for details.
+> foundation (M0), the core API (M2), real-time occupancy (M3) and the
+> community features (M4). The web front-end covers M0–M3 and shows
+> placeholders for the rest. The data pipeline, forecasts and everything after
+> are not built yet. See [PROGRESS.md](PROGRESS.md) for details.
 
 ## What works
 
@@ -30,7 +30,15 @@ The web front-end in `web/` uses React, TypeScript, Tailwind CSS and Vite.
   default forecast
 - WebSocket push on `/ws`: subscribe to a spot, a building or a map viewport;
   reconnecting clients can replay missed messages with `since`
-- A synthetic "Demo University" seed (not real data)
+- Check-ins with heartbeats and verified study time; open check-ins feed the
+  crowding estimate
+- Karma (ledger with daily caps), badges, reputation that rises and falls with
+  confirmed or rejected contributions, pushed to the user over the WebSocket
+- Photos (upload, votes, automatic hiding) and confirmation of user-submitted
+  spots
+- A per-IP limit on `/auth/*`
+- A synthetic "Demo University" seed (not real data) and a simulator with
+  cheating users (`tests/sim/simulate.py`)
 - The web app ([web/README.md](web/README.md)): map and list with live crowd
   colors, search and filters, spot details with claims and votes, crowd and
   event reports with geolocation, accounts and profile; placeholders for the
@@ -38,7 +46,7 @@ The web front-end in `web/` uses React, TypeScript, Tailwind CSS and Vite.
 
 ## What does not work yet
 
-- Check-ins, karma, badges, rate limits on `/auth/*` (M4)
+- Check-ins, photos and karma in the web app (the API exists)
 - Forecasts from history, heatmaps, Study With Me (M5); until then the
   estimate falls back to the spot's typical crowd level
 - Offers, merchant/admin tools (M6)

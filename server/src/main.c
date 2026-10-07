@@ -14,6 +14,7 @@
 #include "spots.h"
 #include "ws.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +30,7 @@ static struct {
   const char *public_dir;
   const char *rules;
   const char *seed;
+  const char *uploads;
   int threads;
   int log;
   int migrate_only;
@@ -41,11 +43,13 @@ static struct {
     .migrations = "server/migrations",
     .public_dir = "web/dist",
     .rules = "server/config/rules.json",
+    .uploads = "data/uploads",
     .threads = 4,
     .log = 1,
 };
 
 static fio_str_info_s PUBLIC_DIR; /* empty when the folder does not exist */
+static fio_str_info_s UPLOADS_DIR;
 
 static void usage(const char *prog) {
   fprintf(stderr,
@@ -55,6 +59,7 @@ static void usage(const char *prog) {
           "  --migrations DIR     migrations folder (default %s)\n"
           "  --public DIR         static front-end folder (default %s)\n"
           "  --rules FILE         rule overrides (default %s)\n"
+          "  --uploads DIR        photo storage, served at /uploads (default %s)\n"
           "  --threads N          HTTP worker threads (default %d)\n"
           "  --quiet              disable request logging\n"
           "  --migrate-only       apply migrations and exit\n"
@@ -63,7 +68,7 @@ static void usage(const char *prog) {
           "  --bench-password     time one Argon2id hash with the current parameters\n"
           "  --test-clock         honor the X-FSS-Now request header (tests only)\n",
           prog, CFG.bind, CFG.db, CFG.migrations, CFG.public_dir, CFG.rules,
-          CFG.threads);
+          CFG.uploads, CFG.threads);
 }
 
 static int parse_args(int argc, char const *argv[]) {
@@ -84,6 +89,7 @@ static int parse_args(int argc, char const *argv[]) {
     FSS_ARG_STR("--public", public_dir)
     FSS_ARG_STR("--rules", rules)
     FSS_ARG_STR("--seed", seed)
+    FSS_ARG_STR("--uploads", uploads)
 #undef FSS_ARG_STR
     if (!strcmp(a, "--threads") && next) {
       CFG.threads = atoi(next);
@@ -165,6 +171,15 @@ static void on_root(fio_http_s *h) {
   int is_get = (method.len == 3 && !memcmp(method.buf, "GET", 3)) ||
                (method.len == 4 && !memcmp(method.buf, "HEAD", 4));
   fio_str_info_s path = fio_http_path(h);
+  /* uploaded photos are content-addressed (<sha256>.<ext>): cache for a year */
+  if (is_get && path.len > 9 && !memcmp(path.buf, "/uploads/", 9)) {
+    fio_str_info_s file = FIO_STR_INFO2(path.buf + 8, path.len - 8);
+    if (!memchr(file.buf + 1, '/', file.len - 1) &&
+        !fio_http_static_file_response(h, UPLOADS_DIR, file, 31536000))
+      return;
+    fss_send_error(h, 404, "not_found", "not found");
+    return;
+  }
   if (is_get && PUBLIC_DIR.len) {
     if (!fio_http_static_file_response(h, PUBLIC_DIR, path, 0))
       return;
@@ -227,6 +242,13 @@ int main(int argc, char const *argv[]) {
     }
     return 0;
   }
+
+  if (!is_dir(CFG.uploads) && mkdir(CFG.uploads, 0755) && errno != EEXIST) {
+    FIO_LOG_FATAL("cannot create the uploads folder %s", CFG.uploads);
+    return 1;
+  }
+  UPLOADS_DIR = FIO_STR_INFO1((char *)CFG.uploads);
+  FSS_UPLOADS_DIR = CFG.uploads;
 
   if (is_dir(CFG.public_dir))
     PUBLIC_DIR = FIO_STR_INFO1((char *)CFG.public_dir);

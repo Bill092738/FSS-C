@@ -1,5 +1,7 @@
 #include "jobs.h"
 
+#include "checkin.h"
+#include "community.h"
 #include "db.h"
 #include "http.h"
 #include "live.h"
@@ -11,6 +13,22 @@ static int job_live_decay(void *a, void *b) {
   (void)a, (void)b;
   if (fss_db() && fss_live_decay_all(fss_now_ms()) < 0)
     FIO_LOG_ERROR("live_decay failed: %s", sqlite3_errmsg(fss_db()));
+  return 0;
+}
+
+static int job_checkin_timeout(void *a, void *b) {
+  (void)a, (void)b;
+  if (fss_db() && fss_checkin_timeout_all(fss_now_ms()) < 0)
+    FIO_LOG_ERROR("checkin_timeout failed: %s", sqlite3_errmsg(fss_db()));
+  return 0;
+}
+
+/* Reputation part of hourly_rollup (roadmap 7.6); the occupancy_hourly
+ * aggregation joins it in M5. */
+static int job_hourly_rollup(void *a, void *b) {
+  (void)a, (void)b;
+  if (fss_db() && fss_reputation_rollup(fss_now_ms()) < 0)
+    FIO_LOG_ERROR("hourly_rollup failed: %s", sqlite3_errmsg(fss_db()));
   return 0;
 }
 
@@ -29,6 +47,12 @@ void fss_jobs_release(fio_io_async_s *q) { fio_timer_destroy(&q->timers); }
 void fss_jobs_register(fio_io_async_s *q) {
   fio_io_async_every(q, .fn = job_live_decay,
                      .every = (uint32_t)FSS_RULES.job_live_decay_ms,
+                     .repetitions = -1);
+  fio_io_async_every(q, .fn = job_checkin_timeout,
+                     .every = (uint32_t)FSS_RULES.job_checkin_timeout_ms,
+                     .repetitions = -1);
+  fio_io_async_every(q, .fn = job_hourly_rollup,
+                     .every = (uint32_t)FSS_RULES.job_hourly_rollup_ms,
                      .repetitions = -1);
   fio_io_async_every(q, .fn = job_wal_checkpoint,
                      .every = (uint32_t)FSS_RULES.job_wal_checkpoint_ms,

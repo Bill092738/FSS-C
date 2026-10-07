@@ -1,6 +1,7 @@
 server/build/
 data/*.db
 data/*.db-*
+data/uploads/
 .venv/
 __pycache__/
 .pytest_cache/

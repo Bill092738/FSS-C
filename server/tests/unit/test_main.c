@@ -11,6 +11,10 @@ void test_fts(void);
 void test_geo(void);
 void test_fence(void);
 void test_estimate(void);
+void test_karma_rules(void);
+void test_reputation_rules(void);
+void test_checkin_rules(void);
+void test_rate_limit(void);
 
 static const struct {
   const char *name;
@@ -23,6 +27,10 @@ static const struct {
     {"geo", test_geo},
     {"fence", test_fence},
     {"estimate", test_estimate},
+    {"karma", test_karma_rules},
+    {"reputation", test_reputation_rules},
+    {"checkin", test_checkin_rules},
+    {"rate_limit", test_rate_limit},
 };
 
 int main(void) {

@@ -9,7 +9,8 @@
 
 #include "fss_fio.h"
 
-/* Schedules live_decay and wal_checkpoint on `q`. */
+/* Schedules live_decay, checkin_timeout, hourly_rollup and wal_checkpoint
+ * on `q`. */
 void fss_jobs_register(fio_io_async_s *q);
 /* Frees the repeating timers after the reactor stopped: cstl destroys its own
  * timer queue at exit but not those of async queues. */

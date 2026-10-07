@@ -44,7 +44,12 @@ static const char SQL_USER_JSON[] =
     " 'badges', (SELECT json_group_array(json_object('key', b.key,"
     "     'name', b.name, 'at', ub.at))"
     "   FROM user_badge ub JOIN badge b ON b.key = ub.badge_key"
-    "   WHERE ub.user_id = u.id))"
+    "   WHERE ub.user_id = u.id),"
+    " 'checkin', (SELECT json_object('id', k.id, 'spot', k.spot_id,"
+    "     'start_at', k.start_at, 'last_beat_at', k.last_beat_at,"
+    "     'verified', json(CASE WHEN k.verified THEN 'true' ELSE 'false' END),"
+    "     'verified_ms', k.verified_ms)"
+    "   FROM checkin k WHERE k.user_id = u.id AND k.end_at IS NULL))"
     " FROM user u WHERE u.id = ?1";
 
 /* Sends {"user":{...}} for `uid`. */
