@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 
 import { ComingSoon } from '../components/ComingSoon'
+import { KarmaHistory } from '../components/KarmaHistory'
 import { Button, Card, ErrorBox, Field, Input, Loading, Select } from '../components/ui'
 import { useAuthActions } from '../lib/auth'
 import { useCampuses, useMe } from '../lib/queries'
@@ -134,8 +135,20 @@ export function MePage() {
 
       <ProfileForm user={u} />
 
+      {u.checkin && (
+        <Card className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm">
+            Checked in since {new Date(u.checkin.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {!u.checkin.verified && ' (not verified yet)'}.
+          </p>
+          <Link to={`/spots/${u.checkin.spot}`} className="text-sm font-medium text-brand-700 hover:underline">
+            Go to the spot →
+          </Link>
+        </Card>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
-        <ComingSoon feature="karmaHistory" compact />
+        <KarmaHistory />
         <ComingSoon feature="coupons" compact />
       </div>
 

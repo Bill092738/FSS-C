@@ -96,6 +96,7 @@ export function ReportPanel({ spot }: { spot: SpotDetail }) {
               {last.event &&
                 (last.event.visible ? 'Others can now see this problem. ' : 'The problem shows once someone else confirms it. ')}
               {fenceText(last.report.fence)}
+              {last.karma > 0 && ` +${last.karma} karma.`}
             </p>
           )}
         </>

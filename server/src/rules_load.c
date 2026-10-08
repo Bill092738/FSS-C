@@ -43,8 +43,43 @@ static const struct {
     {"report_dedupe_ms", R_I64, &FSS_RULES.report_dedupe_ms},
     {"report_max_buildings", R_INT, &FSS_RULES.report_max_buildings},
     {"ws_max_subs", R_INT, &FSS_RULES.ws_max_subs},
+    {"checkin_fence_g", R_DOUBLE, &FSS_RULES.checkin_fence_g},
+    {"checkin_credit_ms", R_I64, &FSS_RULES.checkin_credit_ms},
+    {"checkin_max_outside", R_INT, &FSS_RULES.checkin_max_outside},
+    {"checkin_max_ms", R_I64, &FSS_RULES.checkin_max_ms},
+    {"checkin_stale_ms", R_I64, &FSS_RULES.checkin_stale_ms},
+    {"checkin_signal_weight", R_DOUBLE, &FSS_RULES.checkin_signal_weight},
+    {"karma_report", R_INT, &FSS_RULES.karma_report},
+    {"karma_report_daily", R_INT, &FSS_RULES.karma_report_daily},
+    {"karma_report_min_g", R_DOUBLE, &FSS_RULES.karma_report_min_g},
+    {"karma_event", R_INT, &FSS_RULES.karma_event},
+    {"karma_photo", R_INT, &FSS_RULES.karma_photo},
+    {"karma_photo_daily", R_INT, &FSS_RULES.karma_photo_daily},
+    {"karma_claim", R_INT, &FSS_RULES.karma_claim},
+    {"karma_claim_daily", R_INT, &FSS_RULES.karma_claim_daily},
+    {"karma_claim_min_up", R_INT, &FSS_RULES.karma_claim_min_up},
+    {"karma_spot", R_INT, &FSS_RULES.karma_spot},
+    {"karma_spot_daily", R_INT, &FSS_RULES.karma_spot_daily},
+    {"karma_checkin_hour", R_INT, &FSS_RULES.karma_checkin_hour},
+    {"karma_checkin_daily", R_INT, &FSS_RULES.karma_checkin_daily},
+    {"spot_confirm_min", R_INT, &FSS_RULES.spot_confirm_min},
+    {"photo_daily_max", R_INT, &FSS_RULES.photo_daily_max},
+    {"photo_max_bytes", R_I64, &FSS_RULES.photo_max_bytes},
+    {"rep_accept", R_DOUBLE, &FSS_RULES.rep_accept},
+    {"rep_reject", R_DOUBLE, &FSS_RULES.rep_reject},
+    {"rep_min", R_DOUBLE, &FSS_RULES.rep_min},
+    {"rep_max", R_DOUBLE, &FSS_RULES.rep_max},
+    {"rep_report_diff", R_DOUBLE, &FSS_RULES.rep_report_diff},
+    {"rep_report_agree", R_DOUBLE, &FSS_RULES.rep_report_agree},
+    {"rep_report_conf", R_DOUBLE, &FSS_RULES.rep_report_conf},
+    {"rep_window_ms", R_I64, &FSS_RULES.rep_window_ms},
+    {"reject_p", R_DOUBLE, &FSS_RULES.reject_p},
+    {"reject_down", R_DOUBLE, &FSS_RULES.reject_down},
+    {"auth_ip_per_min", R_INT, &FSS_RULES.auth_ip_per_min},
     {"job_live_decay_ms", R_I64, &FSS_RULES.job_live_decay_ms},
     {"job_wal_checkpoint_ms", R_I64, &FSS_RULES.job_wal_checkpoint_ms},
+    {"job_checkin_timeout_ms", R_I64, &FSS_RULES.job_checkin_timeout_ms},
+    {"job_hourly_rollup_ms", R_I64, &FSS_RULES.job_hourly_rollup_ms},
 };
 
 static int apply_field(fiobj_each_s *e) {
@@ -78,6 +113,8 @@ static int apply_field(fiobj_each_s *e) {
   return 0;
 }
 
+static int job_ok(int64_t ms) { return ms >= 100 && ms <= 86400000; }
+
 /* Rejects values that would divide by zero or break timers. */
 static int rules_validate(void) {
   const fss_rules_s *r = &FSS_RULES;
@@ -92,9 +129,20 @@ static int rules_validate(void) {
     bad = "event_ttl_ms and event_min_users must be positive";
   else if (r->ws_max_subs < 1)
     bad = "ws_max_subs must be >= 1";
-  else if (r->job_live_decay_ms < 100 || r->job_live_decay_ms > 86400000 ||
-           r->job_wal_checkpoint_ms < 100 || r->job_wal_checkpoint_ms > 86400000)
+  else if (!job_ok(r->job_live_decay_ms) || !job_ok(r->job_wal_checkpoint_ms) ||
+           !job_ok(r->job_checkin_timeout_ms) || !job_ok(r->job_hourly_rollup_ms))
     bad = "job intervals must be between 100 ms and 24 h";
+  else if (!(r->rep_min > 0) || !(r->rep_min <= r->rep_max))
+    bad = "need 0 < rep_min <= rep_max";
+  else if (r->checkin_max_ms <= 0 || r->checkin_stale_ms <= 0 ||
+           r->checkin_credit_ms < 0 || r->checkin_max_outside < 1)
+    bad = "check-in limits must be positive";
+  else if (r->spot_confirm_min < 1 || r->karma_claim_min_up < 1)
+    bad = "spot_confirm_min and karma_claim_min_up must be >= 1";
+  else if (r->photo_max_bytes < 1024 || r->photo_max_bytes > (8LL << 20))
+    bad = "photo_max_bytes must be between 1 KiB and 8 MiB (the body limit)";
+  else if (r->auth_ip_per_min < 1 || r->rep_window_ms <= 0)
+    bad = "auth_ip_per_min and rep_window_ms must be positive";
   if (bad)
     FIO_LOG_ERROR("rules: %s", bad);
   return bad ? -1 : 0;

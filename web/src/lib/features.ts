@@ -23,28 +23,6 @@ export const MILESTONE_NAMES: Record<Milestone, string> = {
 }
 
 export const FEATURES = {
-  checkins: {
-    title: 'Check-in',
-    milestone: 'M4',
-    endpoints: ['POST /checkins', 'POST /checkins/:id/heartbeat', 'POST /checkins/:id/end'],
-    description:
-      'Check in at a spot, keep a background heartbeat every 10 minutes, and earn karma for verified study time.',
-    ready: false,
-  },
-  photos: {
-    title: 'Photos',
-    milestone: 'M4',
-    endpoints: ['POST /spots/:id/photos', 'POST /photos/:id/vote'],
-    description: 'Upload and vote on photos of a spot.',
-    ready: false,
-  },
-  karmaHistory: {
-    title: 'Karma history',
-    milestone: 'M4',
-    endpoints: ['karma ledger', 'ws user:{id} {"t":"karma"}'],
-    description: 'Points earned for reports, confirmed events, claims and check-ins, plus badges.',
-    ready: false,
-  },
   forecast: {
     title: 'Crowd forecast',
     milestone: 'M5',

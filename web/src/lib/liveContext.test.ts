@@ -28,10 +28,19 @@ describe('applyToCache', () => {
     expect(qc.getQueryData(q3)).toBe(other) // untouched
   })
 
-  it('updates karma for the logged-in user', () => {
+  it('updates karma for the logged-in user and refreshes the history', () => {
     const qc = new QueryClient()
     qc.setQueryData(keys.me, { id: 1, karma: 3 } as User)
+    qc.setQueryData(keys.karma, { pages: [], pageParams: [] })
     applyToCache(qc, { t: 'karma', delta: 2, total: 5 })
     expect(qc.getQueryData<User>(keys.me)?.karma).toBe(5)
+    expect(qc.getQueryState(keys.karma)?.isInvalidated).toBe(true)
+  })
+
+  it('refetches the profile when a badge arrives', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(keys.me, { id: 1, badges: [] } as unknown as User)
+    applyToCache(qc, { t: 'badge', key: 'first_report', name: 'First Report' })
+    expect(qc.getQueryState(keys.me)?.isInvalidated).toBe(true)
   })
 })

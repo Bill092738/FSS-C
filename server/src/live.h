@@ -34,8 +34,9 @@ typedef struct {
 } fss_outbox_s;
 
 /* Recomputes occupancy_live for `spot` at time `now` (inside the caller's
- * write transaction). When the color or basis changed, a `live` message is
- * queued for spot:{id} and bldg:{building}. Returns SQLITE_OK or an error. */
+ * write transaction). Open verified check-ins add an implicit report (roadmap
+ * 7.4). When the color or basis changed, a `live` message is queued for
+ * spot:{id} and bldg:{building}. Returns SQLITE_OK or an error. */
 int fss_live_update(int64_t spot, int64_t now, fss_live_state_s *out,
                     fss_outbox_s *box);
 
@@ -51,6 +52,10 @@ const char *fss_event_kind(const char *s, size_t len);
  * the outbox. On failure the outbox is released without publishing and the
  * transaction is rolled back. Returns SQLITE_OK or the commit error. */
 int fss_live_commit(fss_outbox_s *box);
+/* Queues a personal notification for user:{user} (roadmap 9.2: karma, badges,
+ * coupons). `json` is a fio_bstr holding a JSON object without its closing
+ * brace; the outbox takes ownership and appends `"at"` when publishing. */
+void fss_outbox_user(fss_outbox_s *box, int64_t user, char *json);
 /* Releases an outbox without publishing (rollback paths). */
 void fss_outbox_clear(fss_outbox_s *box);
 

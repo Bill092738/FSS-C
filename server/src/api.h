@@ -29,4 +29,19 @@ void api_claim_vote(fio_http_s *h, fss_params_s *p);
 /* api_reports.c */
 void api_spot_reports_create(fio_http_s *h, fss_params_s *p);
 
+/* api_checkins.c */
+void api_checkins_create(fio_http_s *h, fss_params_s *p);
+void api_checkin_heartbeat(fio_http_s *h, fss_params_s *p);
+void api_checkin_end(fio_http_s *h, fss_params_s *p);
+
+/* api_community.c */
+void api_spot_confirm(fio_http_s *h, fss_params_s *p);
+void api_spot_photos_create(fio_http_s *h, fss_params_s *p);
+void api_photo_vote(fio_http_s *h, fss_params_s *p);
+void api_me_karma(fio_http_s *h, fss_params_s *p);
+void api_debug_job(fio_http_s *h, fss_params_s *p);
+
+/* Folder for uploaded photos (set once at startup). */
+extern const char *FSS_UPLOADS_DIR;
+
 #endif /* FSS_API_H */

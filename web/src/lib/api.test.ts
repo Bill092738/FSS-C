@@ -36,6 +36,34 @@ describe('request', () => {
     })
   })
 
+  it('uploads photos as the raw image with its own content type', async () => {
+    const fn = mockFetch(201, '{"photo":{}}')
+    const file = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' })
+    await api.uploadPhoto(4, file)
+    expect(fn).toHaveBeenCalledWith('/api/v1/spots/4/photos', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'image/png' },
+      body: file,
+    })
+  })
+
+  it('sends check-in positions only when known', async () => {
+    const fn = mockFetch(201, '{}')
+    await api.checkin(1)
+    await api.heartbeat(7, { lat: 40, lon: -83, accuracy_m: 9 })
+    await api.endCheckin(7)
+    const calls = fn.mock.calls.map((c) => {
+      const [url, init] = c as unknown as [string, RequestInit]
+      return [url, JSON.parse(init.body as string)]
+    })
+    expect(calls).toEqual([
+      ['/api/v1/checkins', { spot_id: 1 }],
+      ['/api/v1/checkins/7/heartbeat', { lat: 40, lon: -83, accuracy_m: 9 }],
+      ['/api/v1/checkins/7/end', {}],
+    ])
+  })
+
   it('omits position fields when location is unavailable', async () => {
     const fn = mockFetch(201, '{}')
     await api.reportLevel(1, 2)

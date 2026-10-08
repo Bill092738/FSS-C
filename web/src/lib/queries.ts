@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useCallback, useSyncExternalStore } from 'react'
 
 import { api, ApiError, type SpotQuery } from './api'
@@ -15,6 +15,7 @@ export const keys = {
   spots: (q: SpotQuery) => ['spots', q] as const,
   spot: (id: number) => ['spot', id] as const,
   me: ['me'] as const,
+  karma: ['karma'] as const,
 }
 
 export function useCampuses() {
@@ -63,6 +64,17 @@ export function useMe() {
     },
     staleTime: 60_000,
     retry: false,
+  })
+}
+
+/** The karma ledger, newest first, one page of 50 at a time. */
+export function useKarmaHistory(enabled = true) {
+  return useInfiniteQuery({
+    queryKey: keys.karma,
+    queryFn: ({ pageParam }) => api.karma(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next ?? undefined,
+    enabled,
   })
 }
 

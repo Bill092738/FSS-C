@@ -22,6 +22,10 @@ export function applyToCache(qc: QueryClient, msg: ServerMessage): void {
     void qc.invalidateQueries({ queryKey: keys.spot(msg.spot) })
   } else if (msg.t === 'karma') {
     qc.setQueryData<User | null>(keys.me, (old) => (old ? { ...old, karma: msg.total } : old))
+    void qc.invalidateQueries({ queryKey: keys.karma })
+  } else if (msg.t === 'badge') {
+    // Badges and reputation live on the profile; refetch it.
+    void qc.invalidateQueries({ queryKey: keys.me })
   }
 }
 

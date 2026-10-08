@@ -1,6 +1,8 @@
 import { Link, NavLink, Outlet } from 'react-router'
 
+import { Toasts } from '../components/Toasts'
 import { Select } from '../components/ui'
+import { useCheckinHeartbeat } from '../lib/checkin'
 import { cx } from '../lib/cx'
 import { useLiveStatus } from '../lib/liveContext'
 import { useCampuses, useMe, useSelectedCampus } from '../lib/queries'
@@ -54,6 +56,7 @@ function CampusPicker() {
 
 export function AppShell() {
   const me = useMe()
+  useCheckinHeartbeat()
   return (
     <div className="flex h-full flex-col">
       <header className="z-20 flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 sm:px-4">
@@ -98,6 +101,7 @@ export function AppShell() {
       <main className="relative min-h-0 flex-1 overflow-y-auto">
         <Outlet />
       </main>
+      <Toasts />
 
       <nav className="grid shrink-0 grid-cols-4 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
         {NAV.map((n) => (

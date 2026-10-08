@@ -35,13 +35,17 @@ int64_t fss_pubsub_tick(int64_t epoch_ms) {
 Outbox
 ***************************************************************************** */
 
-typedef enum { MSG_LIVE, MSG_EVENT } msg_kind_e;
+typedef enum { MSG_LIVE, MSG_EVENT, MSG_USER } msg_kind_e;
 
 struct fss_outbox_item_s {
   msg_kind_e kind;
   union {
     fss_live_state_s live;
     fss_event_state_s event;
+    struct {
+      int64_t id;
+      char *json; /* fio_bstr, object without its closing brace */
+    } user;
   } u;
 };
 
@@ -50,7 +54,9 @@ static void outbox_push(fss_outbox_s *box, struct fss_outbox_item_s item) {
     size_t cap = box->cap ? box->cap * 2 : 4;
     void *p = realloc(box->items, cap * sizeof(*box->items));
     if (!p) {
-      FIO_LOG_ERROR("outbox: out of memory, dropping a live message");
+      FIO_LOG_ERROR("outbox: out of memory, dropping a message");
+      if (item.kind == MSG_USER)
+        fio_bstr_free(item.u.user.json);
       return;
     }
     box->items = p;
@@ -59,7 +65,15 @@ static void outbox_push(fss_outbox_s *box, struct fss_outbox_item_s item) {
   box->items[box->n++] = item;
 }
 
+void fss_outbox_user(fss_outbox_s *box, int64_t user, char *json) {
+  outbox_push(box, (struct fss_outbox_item_s){
+                       .kind = MSG_USER, .u.user = {.id = user, .json = json}});
+}
+
 void fss_outbox_clear(fss_outbox_s *box) {
+  for (size_t i = 0; i < box->n; ++i)
+    if (box->items[i].kind == MSG_USER)
+      fio_bstr_free(box->items[i].u.user.json);
   free(box->items);
   *box = (fss_outbox_s){0};
 }
@@ -88,6 +102,11 @@ char *fss_event_json(char *dest, const fss_event_state_s *e) {
 /* Pub/Sub message bodies (roadmap 9.2). `at` is the publish time in epoch ms
  * and doubles as the replay cursor for the WebSocket `since` field. */
 static char *item_message(const struct fss_outbox_item_s *it, int64_t at) {
+  if (it->kind == MSG_USER) {
+    char *m = fio_bstr_write(NULL, it->u.user.json,
+                             fio_bstr_len(it->u.user.json));
+    return fio_bstr_printf(m, ",\"at\":%lld}", (long long)at);
+  }
   if (it->kind == MSG_LIVE) {
     const fss_live_state_s *s = &it->u.live;
     char *m = fio_bstr_printf(NULL, "{\"t\":\"live\",\"spot\":%lld,\"color\":\"%s\",\"est\":",
@@ -126,6 +145,11 @@ int fss_live_commit(fss_outbox_s *box) {
     for (size_t i = 0; i < box->n; ++i) {
       const struct fss_outbox_item_s *it = &box->items[i];
       char *msg = item_message(it, at);
+      if (it->kind == MSG_USER) {
+        publish("user", it->u.user.id, msg, tick);
+        fio_bstr_free(msg);
+        continue;
+      }
       int64_t spot = it->kind == MSG_LIVE ? it->u.live.spot : it->u.event.spot;
       int64_t bldg =
           it->kind == MSG_LIVE ? it->u.live.building : it->u.event.building;
@@ -149,7 +173,9 @@ Crowding estimate (roadmap 7.3)
  * forecast_slot from history. */
 static const char SQL_LIVE_SPOT[] =
     "SELECT building_id,"
-    " COALESCE(json_extract(attrs_json, '$.crowd_typical.v'), ?2)"
+    " COALESCE(json_extract(attrs_json, '$.crowd_typical.v'), ?2), capacity,"
+    " (SELECT count(*) FROM checkin WHERE spot_id = ?1 AND end_at IS NULL"
+    "   AND verified = 1)"
     " FROM spot WHERE id = ?1";
 static const char SQL_LIVE_OLD[] =
     "SELECT est, basis FROM occupancy_live WHERE spot_id = ?1";
@@ -182,6 +208,8 @@ int fss_live_update(int64_t spot, int64_t now, fss_live_state_s *out,
   int rc = sqlite3_step(st);
   int64_t building = rc == SQLITE_ROW ? sqlite3_column_int64(st, 0) : 0;
   double forecast = rc == SQLITE_ROW ? sqlite3_column_double(st, 1) : 0;
+  double capacity = rc == SQLITE_ROW ? sqlite3_column_double(st, 2) : 0;
+  int64_t present = rc == SQLITE_ROW ? sqlite3_column_int64(st, 3) : 0;
   fss_stmt_release(st);
   if (rc != SQLITE_ROW)
     return rc == SQLITE_DONE ? SQLITE_NOTFOUND : rc;
@@ -211,7 +239,7 @@ int fss_live_update(int64_t spot, int64_t now, fss_live_state_s *out,
   fss_live_obs_s stack[FSS_LIVE_OBS_STACK], *obs = stack;
   size_t n = 0, cap = FSS_LIVE_OBS_STACK;
   while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
-    if (n == cap) {
+    if (n + 1 == cap) { /* keep one slot for the check-in signal */
       fss_live_obs_s *grown = malloc(cap * 2 * sizeof(*grown));
       if (!grown)
         break; /* estimate from the rows read so far */
@@ -226,6 +254,14 @@ int fss_live_update(int64_t spot, int64_t now, fss_live_state_s *out,
                                 .at = sqlite3_column_int64(st, 2)};
   }
   fss_stmt_release(st);
+  /* roadmap 7.4: people checked in here / seats, as a fresh report of
+   * weight checkin_signal_weight (the read loop keeps a slot free) */
+  double ck_level = fss_checkin_level(present, capacity);
+  if (ck_level >= 0 && FSS_RULES.checkin_signal_weight > 0) {
+    obs[n++] = (fss_live_obs_s){.level = ck_level,
+                                .weight = FSS_RULES.checkin_signal_weight,
+                                .at = now};
+  }
   fss_live_est_s e = fss_live_estimate(obs, n, forecast, now);
   if (obs != stack)
     free(obs);
@@ -318,8 +354,9 @@ live_decay job (roadmap 4.6)
 ***************************************************************************** */
 
 /* Every report has weight > 0 (reputation >= 0.1, g >= 0.2), so a spot with
- * reports inside the window always has conf > 0; conf returns to exactly 0
- * once the last report leaves the window. */
+ * reports inside the window or open verified check-ins always has conf > 0;
+ * conf returns to exactly 0 once the last report left the window and the last
+ * check-in ended (which recomputes the spot itself). */
 static const char SQL_LIVE_ACTIVE[] =
     "SELECT spot_id FROM occupancy_live WHERE conf > 0";
 
